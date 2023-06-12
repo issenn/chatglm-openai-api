@@ -9,12 +9,6 @@
     [models.llm."chatglm-6b-int4"]
     type = "chatglm"
     path = "THUDM/chatglm-6b-int4"
-    [models.llm."phoenix-inst-chat-7b"]
-    type = "phoenix"
-    path = "FreedomIntelligence/phoenix-inst-chat-7b"
-    [models.llm."phoenix-inst-chat-7b-int4"]
-    type = "phoenix"
-    path = "FreedomIntelligence/phoenix-inst-chat-7b-int4"
 
   [models.embeddings]
     [models.embeddings."text2vec-large-chinese"]
@@ -22,16 +16,13 @@
     path = "GanymedeNil/text2vec-large-chinese"
 
 [auth]
-tokens = ["token1"]
+tokens = ["sk-token1"]
 
 [tunnel]
   [tunnel.ngrok]
   token = ""
   region = "jp"
-  # Binding custom subdomains is a feature for paid accounts.
   subdomain = ""
   [tunnel.cloudflare]
-  # first need init cloudflare tunnel, see README.md
   cloudflared_path = "/usr/local/bin/cloudflared"
-  # tunnel name, see README.md
-  name = "chatglm-openai-api"
+  name = "api"
