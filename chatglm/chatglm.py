@@ -3,20 +3,30 @@
 ## From: https://github.com/THUDM/ChatGLM-6B
 import torch
 import os
+import json
 from typing import Dict, Union, Optional
 
 from torch.nn import Module
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoConfig, AutoModel, AutoTokenizer
 
 from .chat import do_chat, do_chat_stream
 
-def init_chatglm(model_path: str, running_device: str, gpus: int):
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+def init_chatglm(model_path: str, running_device: str, gpus: int, checkpoint_path: Optional[str] = None):
+    if checkpoint_path is not None:
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(checkpoint_path, trust_remote_code=True)
+        except:
+            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
 
     if running_device.upper() == "GPU":
-        model = load_model_on_gpus(model_path, gpus)
+        model = load_model_on_gpus(model_path, gpus, checkpoint_path=checkpoint_path)
     else:
-        model = AutoModel.from_pretrained(model_path, trust_remote_code=True)
+        if checkpoint_path:
+            model = load_adapter_model(model_path, checkpoint_path)
+        else:
+            model = AutoModel.from_pretrained(model_path, trust_remote_code=True)
         model = model.float()
 
     model.eval()
@@ -24,6 +34,20 @@ def init_chatglm(model_path: str, running_device: str, gpus: int):
     model.do_chat_stream = do_chat_stream
     return tokenizer, model
 
+def load_adapter_model(model_path, checkpoint_path):
+    with open(f'{checkpoint_path}/config.json', 'r') as prefix_encoder_file:
+        prefix_encoder_config = json.loads(prefix_encoder_file.read())
+        config = AutoConfig.from_pretrained(model_path, trust_remote_code=True, pre_seq_len=prefix_encoder_config['pre_seq_len'])
+        # config = AutoConfig.from_pretrained(model_path, trust_remote_code=True, pre_seq_len=128)
+        config.prefix_projection = prefix_encoder_config['prefix_projection']
+    model = AutoModel.from_pretrained(model_path, config=config, trust_remote_code=True)
+    prefix_state_dict = torch.load(os.path.join(checkpoint_path, "pytorch_model.bin"))
+    new_prefix_state_dict = {}
+    for k, v in prefix_state_dict.items():
+        if k.startswith("transformer.prefix_encoder."):
+            new_prefix_state_dict[k[len("transformer.prefix_encoder."):]] = v
+    model.transformer.prefix_encoder.load_state_dict(new_prefix_state_dict)
+    return model
 
 def auto_configure_device_map(num_gpus: int) -> Dict[str, int]:
     # transformer.word_embeddings 占用1层
@@ -55,24 +79,30 @@ def auto_configure_device_map(num_gpus: int) -> Dict[str, int]:
     return device_map
 
 
-def load_model_on_gpus(checkpoint_path: Union[str, os.PathLike], num_gpus: int = 2,
+def load_model_on_gpus(model_path: Union[str, os.PathLike], num_gpus: int = 2, checkpoint_path: Optional[str] = None,
                        device_map: Optional[Dict[str, int]] = None, **kwargs) -> Module:
     if num_gpus < 2 and device_map is None:
-        model = AutoModel.from_pretrained(
-            checkpoint_path, trust_remote_code=True, **kwargs).half().cuda()
+        if checkpoint_path:
+            model = load_adapter_model(model_path, checkpoint_path)
+        else:
+            model = AutoModel.from_pretrained(model_path, trust_remote_code=True, **kwargs)
+        model = model.half().cuda()
     else:
         if num_gpus > torch.cuda.device_count():
             raise Exception(f"need {num_gpus} GPU, but only has {torch.cuda.device_count()}")
 
-        from accelerate import dispatch_model
+        # from accelerate import dispatch_model
 
-        model = AutoModel.from_pretrained(
-            checkpoint_path, trust_remote_code=True, **kwargs).half()
+        if checkpoint_path:
+            model = load_adapter_model(model_path, checkpoint_path)
+        else:
+            model = AutoModel.from_pretrained(model_path, trust_remote_code=True, **kwargs)
+        model = model.half().cuda()
 
-        if device_map is None:
-            device_map = auto_configure_device_map(num_gpus)
+        # if device_map is None:
+        #     device_map = auto_configure_device_map(num_gpus)
 
-        model = dispatch_model(model, device_map=device_map)
-        print(f"Device Map: {model.hf_device_map}\n")
+        # model = dispatch_model(model, device_map=device_map)
+        # print(f"Device Map: {model.hf_device_map}\n")
 
     return model

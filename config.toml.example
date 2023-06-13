@@ -1,14 +1,9 @@
 [models]
   [models.llm]
-    [models.llm."chatglm-6b"]
-    type = "chatglm"
-    path = "THUDM/chatglm-6b"
-    [models.llm."chatglm-6b-int8"]
-    type = "chatglm"
-    path = "THUDM/chatglm-6b-int8"
     [models.llm."chatglm-6b-int4"]
     type = "chatglm"
     path = "THUDM/chatglm-6b-int4"
+    checkpoint = "THUDM/chatglm-6b-int4"
 
   [models.embeddings]
     [models.embeddings."text2vec-large-chinese"]

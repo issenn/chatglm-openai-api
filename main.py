@@ -59,7 +59,7 @@ def main():
             print(f">> Use chatglm llm model {llm['path']}")
             from chatglm import init_chatglm
             context.tokenizer, context.model = init_chatglm(
-                llm['path'], args.device, args.gpus)
+                llm['path'], args.device, args.gpus, llm.get('checkpoint'))
         else:
             print(f"Unsupported LLM model type {llm['type']}")
             sys.exit(1)
